@@ -381,7 +381,6 @@ function islandora_solr_block_view($block_name = '') {
         $display_class = new $solr_blocks[$block_name]['class']();
         $block_function = $solr_blocks[$block_name]['function'];
         if (method_exists($display_class, $block_function)) {
-
           $block['content'] = $display_class->$block_function($_islandora_solr_queryclass);
         }
       }
@@ -426,6 +425,12 @@ function islandora_solr_simple_search_form($form, &$form_state) {
     // @todo Should this be the searched value?
     '#default_value' => '',
   );
+  $form['simple']['islandora_simple_search_query_fulltext'] = array(
+    '#type' => 'checkbox', 
+    '#title' => t('Full-Text?'),
+	'#return_value' => 1,
+	'#default_value' => variable_get('islandora_simple_search_query_fulltext', 0),
+  );
   $form['simple']['submit'] = array(
     '#type' => 'submit',
     '#value' => t('search'),
@@ -445,15 +450,29 @@ function islandora_solr_simple_search_form($form, &$form_state) {
 function islandora_solr_simple_search_form_submit($form, &$form_state) {
   module_load_include('inc', 'islandora_solr', 'includes/utilities');
   $search_string = islandora_solr_replace_slashes($form_state['values']['islandora_simple_search_query']);
-
+  $fulltext = $form_state['values']['islandora_simple_search_query_fulltext'];
   $query = array('type' => 'dismax');
-
+  /*$page_string = '?f[0]=-RELS_EXT_hasModel_uri_ms:"info:fedora/islandora:pageCModel"&';*/
+  $islroot = '/islandora/object/islandora%3Aroot';
+if (empty($search_string)){
   $form_state['redirect'] = array(
-    ISLANDORA_SOLR_SEARCH_PATH . "/$search_string",
-    array(
+"$islroot",
+ /*   ISLANDORA_SOLR_SEARCH_PATH . urlencode($page_string),
+array(
+      'query' => $query,
+    ),*/
+);}
+elseif ($fulltext == 1){
+	$form_state['redirect'] = array(
+    ISLANDORA_SOLR_SEARCH_PATH . "/catch_all_fields_mt%3A%28$search_string%29",
+	);}
+	else{
+		$form_state['redirect'] = array(
+		ISLANDORA_SOLR_SEARCH_PATH . "/$search_string",
+		array(
       'query' => $query,
     ),
-  );
+	);}
 }
 
 /**
@@ -639,14 +658,6 @@ function islandora_solr_advanced_search_form($form, &$form_state) {
     '#prefix' => '<div class="islandora-solr-advanced-controls">',
     '#suffix' => '</div>',
   );
-  // Filter preservation toggle.
-  if (variable_get('islandora_solr_allow_preserve_filters', FALSE)) {
-    $form['controls']['islandora_solr_allow_preserve_filters'] = array(
-      '#type' => 'checkbox',
-      '#title' => t('Preserve Filters'),
-      '#default_value' => FALSE,
-    );
-  }
   $form['controls']['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Search'),
@@ -714,24 +725,11 @@ function islandora_solr_advanced_search_form_submit($form, &$form_state) {
 
   // Check if query is empty.
   if (empty($query)) {
-    if (variable_get('islandora_solr_base_advanced', FALSE)) {
-      $query = variable_get('islandora_solr_base_query', '*:*');
-    }
-    else {
-      $query = '*:*';
-    }
-  }
-  // Handle filters.
-  $filter = '';
-  if (isset($form_state['values']['islandora_solr_allow_preserve_filters']) && $form_state['values']['islandora_solr_allow_preserve_filters']) {
-    $filter = isset($_GET['f']) ? $_GET['f'] : '';
+    $query = '*:*';
   }
 
   // Navigate to results page.
-  $form_state['redirect'] = array(
-    ISLANDORA_SOLR_SEARCH_PATH . "/$query",
-    $filter ? array('query' => array('f' => $filter)) : array(),
-  );
+  $form_state['redirect'] = array(ISLANDORA_SOLR_SEARCH_PATH . "/$query", array());
 }
 
 /**
@@ -831,7 +829,6 @@ function islandora_solr_display() {
  *   A rendered list containing Solr sort links.
  */
 function islandora_solr_sort() {
-  module_load_include('inc', 'islandora', 'includes/utilities');
   global $_islandora_solr_queryclass;
 
   $output = '';
@@ -890,25 +887,13 @@ function islandora_solr_sort() {
 
       $query = array_merge($params, array('sort' => $sort_param));
 
-      $attributes = array(
-        'sort' => array(
-          'attr' => array(
-            'class' => array(),
-          ),
-          'query' => $query,
-          'path' => $path,
-        ),
-      );
-      $attr =& $attributes['sort']['attr'];
+      $attr = array();
       if ($term == $current_sort_term) {
-        $attr['class'] = array('active');
+        $attr['class'] = 'active';
       }
       $attr['rel'] = 'nofollow';
       $attr['title'] = $label;
       $attr['href'] = url($path, array('query' => $query));
-
-      $hooks = islandora_build_hook_list(ISLANDORA_SOLR_FACET_BUCKET_CLASSES_HOOK_BASE);
-      drupal_alter($hooks, $attributes, $_islandora_solr_queryclass);
 
       // XXX: We're not using l() because of
       // @link http://drupal.org/node/41595 active classes. @endlink
