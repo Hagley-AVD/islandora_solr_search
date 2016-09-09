@@ -118,7 +118,6 @@ class IslandoraSolrResults {
 
     // Get list of secondary displays.
     $secondary_array = variable_get('islandora_solr_secondary_display', array());
-
     foreach ($secondary_array as $name => $status) {
       if ($status === $name) {
         // Generate URL.
@@ -190,9 +189,10 @@ class IslandoraSolrResults {
    *   Rendered lists of the currently active query and/or filters.
    */
   public function currentQuery($islandora_solr_query) {
+    module_load_include('inc', 'islandora', 'includes/utilities');
+
     $output = '';
     $path = current_path();
-
     $format = variable_get('islandora_solr_facet_date_format', 'Y');
 
     // Get user provided filter parameters.
@@ -204,24 +204,39 @@ class IslandoraSolrResults {
       // Get query value.
       $query_value = $islandora_solr_query->solrQuery;
       $query_list = array();
+      if (variable_get('islandora_solr_human_friendly_query_block', TRUE)) {
+        foreach ($this->searchFieldArray as $search_field => $search_field_label) {
+          $query_value = str_replace($search_field . ':(', $search_field_label . ':(', $query_value);
+        }
+      }
 
       // Remove link keeps all parameters (query gets removed instead).
       $query_minus = $params;
 
       // Remove query from path.
-      $path_minus = implode('/', explode('/', $path, -1)) . '/ ';
+      $path_minus = implode('/', explode('/', $path, -1));
 
       // Set attributes variable for remove link.
-      $attr_minus = array();
+      $attributes = array(
+        'minus' => array(
+          'attr' => array(),
+          'path' => $path_minus,
+          'query' => $query_minus,
+        ),
+      );
+      $attr_minus =& $attributes['minus']['attr'];
       $attr_minus['title'] = t('Remove') . ' ' . $query_value;
-      $attr_minus['class'] = 'remove-query';
+      $attr_minus['class'] = array('remove-query');
       $attr_minus['rel'] = 'nofollow';
       $attr_minus['href'] = url($path_minus, array('query' => $query_minus));
+
+      $hooks = islandora_build_hook_list(ISLANDORA_SOLR_FACET_BUCKET_CLASSES_HOOK_BASE);
+      drupal_alter($hooks, $attributes, $islandora_solr_query);
 
       // XXX: We are not using l() because of active classes:
       // @see http://drupal.org/node/41595
       // Create link.
-      $query_list[] = '<a' . drupal_attributes($attr_minus) . '>(-)</a> ' . check_plain($query_value);
+      $query_list[] = '<a' . drupal_attributes($attributes['minus']['attr']) . '>(-)</a> ' . check_plain($query_value);
 
       // Add wrap and list.
       $output .= '<div class="islandora-solr-query-wrap">';
@@ -263,16 +278,27 @@ class IslandoraSolrResults {
           unset($query_minus['f']);
         }
         // Set attributes variable for remove link.
-        $attr_minus = array();
+        $attributes = array(
+          'minus' => array(
+            'attr' => array(),
+            'path' => $path,
+            'query' => $query_minus,
+          ),
+        );
+        $attr_minus =& $attributes['minus']['attr'];
         $attr_minus['title'] = t('Remove') . ' ' . $filter;
-        $attr_minus['class'] = 'remove-filter';
+        $attr_minus['class'] = array('remove-filter');
         $attr_minus['rel'] = 'nofollow';
         $attr_minus['href'] = url($path, array('query' => $query_minus));
+
+        $hooks = islandora_build_hook_list(ISLANDORA_SOLR_FACET_BUCKET_CLASSES_HOOK_BASE);
+        drupal_alter($hooks, $attributes, $islandora_solr_query);
 
         // XXX: We are not using l() because of active classes:
         // @see http://drupal.org/node/41595
         // Create link.
-        $filter_list[] = '<a' . drupal_attributes($attr_minus) . '>(-)</a> ' . $symbol . ' ' . check_plain($filter_string);
+        $filter_list[] = '<a' . drupal_attributes($attributes['minus']['attr']) . '>(-)</a> ' . $symbol . ' ' . check_plain($filter_string);
+
       }
 
       // Return filter list.
@@ -435,7 +461,7 @@ class IslandoraSolrResults {
       // XXX: We are not using l() because of active classes:
       // @see http://drupal.org/node/41595
       // Create link.
-      $breadcrumb[] = '<a' . drupal_attributes($attr) . '>' . check_plain($query_value) . '</a>'
+      $breadcrumb[] = '<a' . drupal_attributes($attr) . '>' . stripslashes(check_plain($query_value)) . '</a>'
             . '<span class="islandora-solr-breadcrumb-super"> <a' . drupal_attributes($attr_x) . '>(' . t('x') . ')</a></span>';
     }
 
@@ -446,7 +472,6 @@ class IslandoraSolrResults {
     $context = 'solr';
     drupal_alter('islandora_breadcrumbs', $breadcrumb, $context);
     drupal_set_breadcrumb($breadcrumb);
-
   }
 
   /**
@@ -487,11 +512,12 @@ class IslandoraSolrResults {
       $filter_split = preg_split(ISLANDORA_SOLR_QUERY_FIELD_VALUE_SPLIT_REGEX, $filter, 2);
       // Trim brackets.
       $filter_split[1] = trim($filter_split[1], "\"");
+      $solr_field = ltrim($filter_split[0], '-');
       // If value is date.
-      if (isset($islandora_solr_query->solrParams['facet.date']) && in_array(ltrim($filter_split[0], '-'), $islandora_solr_query->solrParams['facet.date'])) {
+      if (isset($islandora_solr_query->solrParams['facet.date']) && in_array($solr_field, $islandora_solr_query->solrParams['facet.date'])) {
         // Check date format setting.
         foreach ($this->rangeFacets as $value) {
-          if ($value['solr_field'] == $filter_split[0] && isset($value['solr_field_settings']['date_facet_format']) && !empty($value['solr_field_settings']['date_facet_format'])) {
+          if ($value['solr_field'] == $solr_field && isset($value['solr_field_settings']['date_facet_format']) && !empty($value['solr_field_settings']['date_facet_format'])) {
             $format = $value['solr_field_settings']['date_facet_format'];
           }
         }
@@ -527,7 +553,6 @@ class IslandoraSolrResults {
     IslandoraSolrFacets::init($islandora_solr_query);
     $output = '';
     $facet_order = $this->facetFieldArray;
-
     foreach ($facet_order as $facet_key => $facet_label) {
       $facet_obj = new IslandoraSolrFacets($facet_key);
       $output .= $facet_obj->getFacet();
@@ -537,7 +562,6 @@ class IslandoraSolrResults {
     // strings. when we double-encode quotation marks they're incomprehensible
     // to Solr.
     $output = str_replace('%2B', '%252B', $output);
-
     return $output;
   }
 
@@ -622,6 +646,8 @@ class IslandoraSolrFacets {
   public $results;
   public $title = NULL;
   public $content = NULL;
+
+
   // @codingStandardsIgnoreEnd
 
   /**
@@ -861,7 +887,7 @@ class IslandoraSolrFacets {
   public function prepareFacetDates() {
     $facet_field = $this->facet_field;
     $results = $this->results;
-    $format = self::getDateFormat();
+    $format = $this->getDateFormat();
     $date_results = array();
     // Render date facet fields.
     foreach ($results as $bucket => $count) {
@@ -903,9 +929,6 @@ class IslandoraSolrFacets {
     $soft_limit = self::$soft_limit;
     $buckets = array();
     $replace_bucket = (isset($this->settings['solr_field_settings']['pid_object_label']) && $this->settings['solr_field_settings']['pid_object_label'] ? TRUE : FALSE);
-    if ($replace_bucket) {
-      $query_processor = new IslandoraSolrQueryProcessor();
-    }
     foreach ($results as $key => $values) {
       $bucket = $values['bucket'];
       $filter = $values['filter'];
@@ -913,6 +936,7 @@ class IslandoraSolrFacets {
 
       // Replace link bucket with object label based on facet field settings.
       if ($replace_bucket) {
+        $query_processor = new IslandoraSolrQueryProcessor();
         $label = NULL;
         $pid = str_replace('info:fedora/', '', $bucket);
         if (islandora_is_valid_pid($pid)) {
@@ -955,19 +979,39 @@ class IslandoraSolrFacets {
       $query_minus = array_merge_recursive($params, array('f' => array('-' . $filter)));
 
       // Set basic attributes.
-      $attr_plus = $attr_minus = $attr = array('rel' => 'nofollow');
-      $attr['href'] = $attr_plus['href'] = url($path, array('query' => $query_plus));
-      $attr_minus['href'] = url($path, array('query' => $query_minus));
-      $attr_plus['class'] = 'plus';
-      $attr_minus['class'] = 'minus';
+      $attributes = array(
+        'link' => array(
+          'path' => $path,
+        ),
+        'plus' => array(
+          'path' => $path,
+        ),
+        'minus' => array(
+          'path' => $path,
+        ),
+      );
+      $attributes['link']['attr'] = $attributes['minus']['attr'] = $attributes['plus']['attr'] = array('rel' => 'nofollow');
+
+      $attributes['link']['attr']['href'] = $attributes['plus']['attr']['href'] = url($path, array('query' => $query_plus));
+      $attributes['link']['query'] = $attributes['plus']['query'] = $query_plus;
+      $attributes['minus']['attr']['href'] = url($path, array('query' => $query_minus));
+      $attributes['minus']['query'] = $query_minus;
+
+      $attributes['plus']['attr']['class'] = array('plus');
+      $attributes['minus']['attr']['class'] = array('minus');
+
+      module_load_include('inc', 'islandora', 'includes/utilities');
+
+      $hooks = islandora_build_hook_list(ISLANDORA_SOLR_FACET_BUCKET_CLASSES_HOOK_BASE);
+      drupal_alter($hooks, $attributes, $islandora_solr_query);
 
       // XXX: We are not using l() because of active classes:
       // @see http://drupal.org/node/41595
       // Create link.
-      $link['link'] = '<a' . drupal_attributes($attr) . '>' . $bucket . '</a>';
+      $link['link'] = '<a' . drupal_attributes($attributes['link']['attr']) . '>' . $bucket . '</a>';
       $link['count'] = $count;
-      $link['link_plus'] = '<a' . drupal_attributes($attr_plus) . '>+</a>';
-      $link['link_minus'] = '<a' . drupal_attributes($attr_minus) . '>-</a>';
+      $link['link_plus'] = '<a' . drupal_attributes($attributes['plus']['attr']) . '>+</a>';
+      $link['link_minus'] = '<a' . drupal_attributes($attributes['minus']['attr']) . '>-</a>';
       $buckets[] = $link;
     }
 
@@ -1008,6 +1052,8 @@ class IslandoraSolrFacets {
     return $show_more;
   }
 
+  protected $sliderKey = NULL;
+
   /**
    * Prepare facet dates for slider.
    *
@@ -1024,7 +1070,10 @@ class IslandoraSolrFacets {
     $results = $this->results;
     $format = self::getDateFormat();
     $needed_solr_call = self::$needed_solr_call;
-    $range_slider_key = self::$range_slider_key;
+    if (!isset($this->sliderKey)) {
+      $this->sliderKey = self::$range_slider_key++;
+    }
+    $range_slider_key = $this->sliderKey;
 
     $date_results = array();
     // Grab gap and end, and strip all non-buckets in results.
@@ -1162,7 +1211,6 @@ class IslandoraSolrFacets {
       'date_format' => $date_format,
       'form_key' => $range_slider_key,
     );
-    self::$range_slider_key++;
 
     return $elements;
   }
@@ -1175,7 +1223,24 @@ class IslandoraSolrFacets {
    */
   public function renderSlider($facet_dates_as_slider) {
     $elements = $facet_dates_as_slider;
+
+    // XXX: We do not want this to possibly grab from the cache when AJAXing,
+    // since $elements changes... Makes a mess of rebuilding.
+    $old_build_id = (
+      // ... our form...
+      isset($_POST['form_id']) && strpos($_POST['form_id'], 'islandora_solr_range_slider_form_') === 0 &&
+      // ... AJAXing...
+      isset($_POST['ajax_page_state']) &&
+      // ... with the build ID.
+      isset($_POST['form_build_id'])) ? $_POST['form_build_id'] : NULL;
+    if (isset($old_build_id)) {
+      $_POST['form_build_id'] = NULL;
+    }
     $range_slider_form = drupal_get_form('islandora_solr_range_slider_form_' . $elements['form_key'], $elements);
+    if (isset($old_build_id)) {
+      // XXX: Restore the build ID to $_POST, just in case.
+      $_POST['form_build_id'] = $old_build_id;
+    }
     $this->content .= drupal_render($range_slider_form);
   }
 

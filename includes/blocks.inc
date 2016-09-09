@@ -381,6 +381,7 @@ function islandora_solr_block_view($block_name = '') {
         $display_class = new $solr_blocks[$block_name]['class']();
         $block_function = $solr_blocks[$block_name]['function'];
         if (method_exists($display_class, $block_function)) {
+
           $block['content'] = $display_class->$block_function($_islandora_solr_queryclass);
         }
       }
@@ -421,7 +422,7 @@ function islandora_solr_simple_search_form($form, &$form_state) {
   $form['simple']["islandora_simple_search_query"] = array(
     '#size' => '15',
     '#type' => 'textfield',
-    '#title' => '',
+    '#title' => t("Search Term"),
     // @todo Should this be the searched value?
     '#default_value' => '',
   );
@@ -638,6 +639,14 @@ function islandora_solr_advanced_search_form($form, &$form_state) {
     '#prefix' => '<div class="islandora-solr-advanced-controls">',
     '#suffix' => '</div>',
   );
+  // Filter preservation toggle.
+  if (variable_get('islandora_solr_allow_preserve_filters', FALSE)) {
+    $form['controls']['islandora_solr_allow_preserve_filters'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Preserve Filters'),
+      '#default_value' => FALSE,
+    );
+  }
   $form['controls']['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Search'),
@@ -705,11 +714,24 @@ function islandora_solr_advanced_search_form_submit($form, &$form_state) {
 
   // Check if query is empty.
   if (empty($query)) {
-    $query = '*:*';
+    if (variable_get('islandora_solr_base_advanced', FALSE)) {
+      $query = variable_get('islandora_solr_base_query', '*:*');
+    }
+    else {
+      $query = '*:*';
+    }
+  }
+  // Handle filters.
+  $filter = '';
+  if (isset($form_state['values']['islandora_solr_allow_preserve_filters']) && $form_state['values']['islandora_solr_allow_preserve_filters']) {
+    $filter = isset($_GET['f']) ? $_GET['f'] : '';
   }
 
   // Navigate to results page.
-  $form_state['redirect'] = array(ISLANDORA_SOLR_SEARCH_PATH . "/$query", array());
+  $form_state['redirect'] = array(
+    ISLANDORA_SOLR_SEARCH_PATH . "/$query",
+    $filter ? array('query' => array('f' => $filter)) : array(),
+  );
 }
 
 /**
@@ -809,6 +831,7 @@ function islandora_solr_display() {
  *   A rendered list containing Solr sort links.
  */
 function islandora_solr_sort() {
+  module_load_include('inc', 'islandora', 'includes/utilities');
   global $_islandora_solr_queryclass;
 
   $output = '';
@@ -867,13 +890,25 @@ function islandora_solr_sort() {
 
       $query = array_merge($params, array('sort' => $sort_param));
 
-      $attr = array();
+      $attributes = array(
+        'sort' => array(
+          'attr' => array(
+            'class' => array(),
+          ),
+          'query' => $query,
+          'path' => $path,
+        ),
+      );
+      $attr =& $attributes['sort']['attr'];
       if ($term == $current_sort_term) {
-        $attr['class'] = 'active';
+        $attr['class'] = array('active');
       }
       $attr['rel'] = 'nofollow';
       $attr['title'] = $label;
       $attr['href'] = url($path, array('query' => $query));
+
+      $hooks = islandora_build_hook_list(ISLANDORA_SOLR_FACET_BUCKET_CLASSES_HOOK_BASE);
+      drupal_alter($hooks, $attributes, $_islandora_solr_queryclass);
 
       // XXX: We're not using l() because of
       // @link http://drupal.org/node/41595 active classes. @endlink
@@ -927,17 +962,21 @@ function islandora_solr_search_navigation() {
     $next_page = NULL;
     $offset = $params['solr_nav']['offset'];
     $page = $params['solr_nav']['page'];
-    $query_processor = $nav_params['query_processor'];
-    $limit = $query_processor->solrLimit;
+    $query_processor = new IslandoraSolrQueryProcessor();
+    $query_processor->solrQuery = $nav_params['query'];
+    $query_processor->internalSolrQuery = $nav_params['query_internal'];
+    $query_processor->solrLimit = $nav_params['limit'];
+    $query_processor->internalSolrParams = $nav_params['params_internal'];
+    $query_processor->solrParams = $nav_params['params'];
+    $limit = $nav_params['limit'];
     $query_processor->solrStart = $page * $limit;
+
     // Get solr objects for current page.
     $query_processor->executeQuery();
 
+    $objects = array();
     if (!empty($query_processor->islandoraSolrResult)) {
       $objects = $query_processor->islandoraSolrResult['response']['objects'];
-    }
-    else {
-      $objects = array();
     }
 
     // Try get previous object on the current page.
@@ -952,8 +991,6 @@ function islandora_solr_search_navigation() {
     // If previous object can't be found on current page,
     // go to the previous page and select the last object.
     if (!$prev_solr_object && $page != 0) {
-      $query_processor = $nav_params['query_processor'];
-      $limit = $query_processor->solrLimit;
       $query_processor->solrStart = ($page - 1) * $limit;
       $query_processor->executeQuery();
       if (!empty($query_processor->islandoraSolrResult) && !empty($query_processor->islandoraSolrResult['response']['objects'])) {
@@ -975,7 +1012,6 @@ function islandora_solr_search_navigation() {
     // If next object can't be found on current page,
     // go to the next page and select the first object.
     if (!$next_solr_object) {
-      $query_processor = $nav_params['query_processor'];
       $limit = $query_processor->solrLimit;
       $query_processor->solrStart = ($page + 1) * $limit;
       $query_processor->executeQuery();
@@ -993,7 +1029,7 @@ function islandora_solr_search_navigation() {
     // Get URL details from the prev and next objects
     // to populate navigation links.
     if (isset($nav_params['path'])) {
-      $return_query = array_merge($nav_params['query_processor']->internalSolrParams, array('page' => $page));
+      $return_query = array_merge($query_processor->internalSolrParams, array('page' => $page));
       $return_link = url($nav_params['path'], array('query' => $return_query, 'absolute' => TRUE));
     }
     if ($prev_solr_object) {
