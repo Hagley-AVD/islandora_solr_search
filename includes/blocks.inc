@@ -453,8 +453,19 @@ function islandora_solr_simple_search_form($form, &$form_state) {
 function islandora_solr_simple_search_form_submit($form, &$form_state) {
   module_load_include('inc', 'islandora_solr', 'includes/utilities');
   $search_string = islandora_solr_replace_slashes($form_state['values']['islandora_simple_search_query']);
-
-  $query = array('type' => 'dismax');
+  $fa = $form_state['values']['eadcheck'];
+  if ($fa == 0){
+ 	 	$faead = '-RELS_EXT_isMemberOfCollection_uri_ms:("info:fedora/islandora:ead")';
+ 	 	$fafacet = 'f[0]';
+	} else {
+  		$faead = NULL;
+  		$fafacet = NULL;
+	}
+ /* $fav = "$fafacet => $faead";*/
+  $query = array(
+		'type' => 'edismax',
+		$fafacet => $faead,
+);
 
   $form_state['redirect'] = array(
     ISLANDORA_SOLR_SEARCH_PATH . "/$search_string",
