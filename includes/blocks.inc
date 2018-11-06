@@ -461,7 +461,6 @@ function islandora_solr_simple_search_form_submit($form, &$form_state) {
   		$faead = NULL;
   		$fafacet = NULL;
 	}
- /* $fav = "$fafacet => $faead";*/
   $query = array(
 		'type' => 'edismax',
 		$fafacet => $faead,
@@ -709,6 +708,16 @@ function islandora_solr_advanced_search_form_submit($form, &$form_state) {
   // Collect query values.
   $query_array = array();
 
+  // Finding aid additions
+   $fa = $form_state['values']['eadcheck'];
+  if ($fa == 0){
+        $faead = '-RELS_EXT_isMemberOfCollection_uri_ms:("info:fedora/islandora:ead")';
+        $fafacet = 'f[0]';
+    } else {
+        $faead = NULL;
+        $fafacet = NULL;
+    }
+
   // Get Lucene syntax escaping configuration, prior to the following
   // foreach loop.
   $lucene_syntax_escape = variable_get('islandora_solr_advanced_search_block_lucene_syntax_escape', FALSE);
@@ -766,10 +775,18 @@ function islandora_solr_advanced_search_form_submit($form, &$form_state) {
   // Use work around for some special URL characters.
   $query = islandora_solr_replace_slashes($query);
 
+  // Finding aids to query, breaks preserve filters
+  $faquery = array(
+				$fafacet => $faead,
+	);
+
   // Navigate to results page.
   $form_state['redirect'] = array(
     ISLANDORA_SOLR_SEARCH_PATH . "/$query",
-    $filter ? array('query' => array('f' => $filter)) : array(),
+	array(
+		'query' => $faquery,
+	),
+    //$filter ? array('query' => array('f' => $filter)) : array(),
   );
 }
 
