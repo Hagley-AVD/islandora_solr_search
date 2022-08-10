@@ -226,6 +226,7 @@ class IslandoraSolrResults {
           'attr' => array(),
           'path' => $path_minus,
           'query' => $query_minus,
+          'label' => '(-)',
         ),
       );
       $attr_minus =& $attributes['minus']['attr'];
@@ -240,7 +241,7 @@ class IslandoraSolrResults {
       // XXX: We are not using l() because of active classes:
       // @see http://drupal.org/node/41595
       // Create link.
-      $query_list[] = '<a' . drupal_attributes($attributes['minus']['attr']) . '>(-)</a> ' . check_plain($query_value);
+      $query_list[] = '<a' . drupal_attributes($attributes['minus']['attr']) . '>' . $attributes['minus']['label'] . '</a> ' . check_plain($query_value);
 
       // Add wrap and list.
       $output .= '<div class="islandora-solr-query-wrap">';
@@ -287,6 +288,7 @@ class IslandoraSolrResults {
             'attr' => array(),
             'path' => $path,
             'query' => $query_minus,
+            'label' => '(-)',
           ),
         );
         $attr_minus =& $attributes['minus']['attr'];
@@ -301,7 +303,7 @@ class IslandoraSolrResults {
         // XXX: We are not using l() because of active classes:
         // @see http://drupal.org/node/41595
         // Create link.
-        $filter_list[] = '<a' . drupal_attributes($attributes['minus']['attr']) . '>(-)</a> ' . $symbol . ' ' . check_plain($filter_string);
+        $filter_list[] = '<a' . drupal_attributes($attributes['minus']['attr']) . '>' . $attributes['minus']['label'] . '</a> ' . $symbol . ' ' . check_plain($filter_string);
 
       }
 
@@ -1064,15 +1066,18 @@ class IslandoraSolrFacets {
       $attributes = array(
         'link' => array(
           'path' => $path,
+          'label' => $bucket,
         ),
         'plus' => array(
           'path' => $path,
+          'label' => '+',
         ),
         'minus' => array(
           'path' => $path,
+          'label' => '-',
         ),
       );
-      $attributes['link']['attr'] = $attributes['minus']['attr'] = $attributes['plus']['attr'] = array('rel' => 'nofollow');
+      $attributes['link']['attr'] = $attributes['minus']['attr'] = $attributes['plus']['attr'] = array('rel' => 'nofollow', 'title' => $bucket);
 
       $attributes['link']['attr']['href'] = $attributes['plus']['attr']['href'] = url($path, array('query' => $query_plus));
       $attributes['link']['query'] = $attributes['plus']['query'] = $query_plus;
@@ -1090,15 +1095,15 @@ class IslandoraSolrFacets {
       // XXX: We are not using l() because of active classes:
       // @see http://drupal.org/node/41595
       // Create link.
-      $link['link'] = '<a' . drupal_attributes($attributes['link']['attr']) . '>' . $bucket . '</a>';
+      $link['link'] = '<a' . drupal_attributes($attributes['link']['attr']) . '>' . $attributes['link']['label'] . '</a>';
       $link['count'] = $count;
-      $link['link_plus'] = '<a' . drupal_attributes($attributes['plus']['attr']) . '>+</a>';
-      $link['link_minus'] = '<a' . drupal_attributes($attributes['minus']['attr']) . '>-</a>';
+      $link['link_plus'] = '<a' . drupal_attributes($attributes['plus']['attr']) . '>' . $attributes['plus']['label'] . '</a>';
+      $link['link_minus'] = '<a' . drupal_attributes($attributes['minus']['attr']) . '>' . $attributes['minus']['label'] . '</a>';
       $buckets[] = $link;
     }
 
     // Show more link.
-    if (count($buckets) > $soft_limit) {
+    if (count($buckets) > $soft_limit && $soft_limit > 0) {
       $buckets_visible = array_slice($buckets, 0, $soft_limit);
       $buckets_hidden = array_slice($buckets, $soft_limit);
       $this->content .= theme('islandora_solr_facet', array(
