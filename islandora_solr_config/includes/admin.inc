@@ -6,12 +6,17 @@
  */
 
 /**
- * Function to return admin setting form.
+ * Admin settings for the RSS exposed by Solr.
+ *
+ * @param array $form
+ *   An array representing the form within Drupal.
+ * @param array $form_state
+ *   An array containing the Drupal form state.
+ *
  * @return array
- *   returns the form
+ *   The admin form to be rendered.
  */
 function islandora_solr_config_admin_rss_settings($form, &$form_state) {
-
   // Get variables.
   $rss_item = variable_get('islandora_solr_config_rss_item', array(
     'title' => 'fgs_label_s',
@@ -20,12 +25,13 @@ function islandora_solr_config_admin_rss_settings($form, &$form_state) {
     'category' => '',
     'pubDate' => 'fgs_createdDate_s',
     'enclosure_dsid' => 'TN',
-    ));
+  ));
   $rss_channel = variable_get('islandora_solr_config_rss_channel', array(
     'copyright' => '',
     'managingEditor' => '',
     'webMaster' => '',
   ));
+  $rss_limit = variable_get('islandora_solr_config_rss_limit', 50);
 
   $form = array(
     '#tree' => TRUE,
@@ -42,6 +48,7 @@ function islandora_solr_config_admin_rss_settings($form, &$form_state) {
     '#type' => 'textfield',
     '#title' => t('Title'),
     '#description' => t('Solr field to populate the item title.'),
+    '#autocomplete_path' => 'islandora_solr/autocomplete_luke',
     '#default_value' => $rss_item['title'],
     '#required' => TRUE,
   );
@@ -49,24 +56,28 @@ function islandora_solr_config_admin_rss_settings($form, &$form_state) {
     '#type' => 'textfield',
     '#title' => t('Description'),
     '#description' => t('Solr field to populate the item synopsis.'),
+    '#autocomplete_path' => 'islandora_solr/autocomplete_luke',
     '#default_value' => $rss_item['description'],
   );
   $form['rss_item']['author'] = array(
     '#type' => 'textfield',
     '#title' => t('Author'),
     '#description' => t('Solr field to populate the item author.'),
+    '#autocomplete_path' => 'islandora_solr/autocomplete_luke',
     '#default_value' => $rss_item['author'],
   );
   $form['rss_item']['category'] = array(
     '#type' => 'textfield',
     '#title' => t('Category'),
     '#description' => t('Solr field to populate the item category.'),
+    '#autocomplete_path' => 'islandora_solr/autocomplete_luke',
     '#default_value' => $rss_item['category'],
   );
   $form['rss_item']['pubDate'] = array(
     '#type' => 'textfield',
     '#title' => t('Publication date'),
     '#description' => t('Solr field to populate the item publication date (pubDate).'),
+    '#autocomplete_path' => 'islandora_solr/autocomplete_luke',
     '#default_value' => $rss_item['pubDate'],
   );
   $form['rss_item']['enclosure_dsid'] = array(
@@ -100,6 +111,12 @@ function islandora_solr_config_admin_rss_settings($form, &$form_state) {
     '#description' => t('Email address for person responsible for technical issues relating to channel.'),
     '#default_value' => $rss_channel['webMaster'] ? $rss_channel['webMaster'] : '',
   );
+  $form['rss_limit'] = array(
+    '#type' => 'textfield',
+    '#title' => 'RSS results limit',
+    '#description' => 'Maximum number of results via RSS.',
+    '#default_value' => $rss_limit,
+  );
   $form['buttons']['submit'] = array(
     '#type' => 'submit',
     '#value' => t('Save'),
@@ -110,7 +127,6 @@ function islandora_solr_config_admin_rss_settings($form, &$form_state) {
     '#value' => t('Reset to defaults'),
     '#weight' => 51,
   );
-
   return $form;
 }
 
@@ -125,10 +141,11 @@ function islandora_solr_config_admin_rss_settings_submit($form, &$form_state) {
     // Get values.
     $rss_item = $form_state['values']['rss_item'];
     $rss_channel = $form_state['values']['rss_channel'];
-
+    $rss_limit = $form_state['values']['rss_limit'];
     // Set variable.
     variable_set('islandora_solr_config_rss_item', $rss_item);
     variable_set('islandora_solr_config_rss_channel', $rss_channel);
+    variable_set('islandora_solr_config_rss_limit', $rss_limit);
   }
 
   // On reset.
